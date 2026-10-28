@@ -1,0 +1,1804 @@
+{
+    "openapi": "3.1.2",
+    "info": {
+        "title": "Taline Wallet Ledger API",
+        "version": "1.0.0",
+        "description": "Double-entry wallet ledger API with append-only balance projections, database-backed idempotency, and a transactional outbox."
+    },
+    "servers": [
+        {
+            "url": "http://localhost/api/v1"
+        }
+    ],
+    "paths": {
+        "/wallets/{wallet}/deposits": {
+            "post": {
+                "operationId": "v1_wallets_deposits_store",
+                "tags": [
+                    "Deposit"
+                ],
+                "parameters": [
+                    {
+                        "name": "wallet",
+                        "in": "path",
+                        "required": true,
+                        "description": "The wallet ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true,
+                        "description": "Printable ASCII retry identity. Reusing it with the same request replays the committed result; changing the request returns 409.",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[\\x20-\\x7E]+$",
+                            "minLength": 1,
+                            "maxLength": 128
+                        },
+                        "example": "01JDEMO0000000000000000000"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateDepositRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Resource created.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DepositCommandResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Request validation or a deterministic business rule failed.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Command conflicts with a committed operation or resource state.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/deposits/{deposit}": {
+            "get": {
+                "operationId": "v1_deposits_show",
+                "tags": [
+                    "Deposit"
+                ],
+                "parameters": [
+                    {
+                        "name": "deposit",
+                        "in": "path",
+                        "required": true,
+                        "description": "The deposit ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`DepositResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DepositResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/gateway/deposits/{deposit}/confirm": {
+            "post": {
+                "operationId": "v1_gateway_deposits_confirm",
+                "tags": [
+                    "GatewayDepositCallback"
+                ],
+                "parameters": [
+                    {
+                        "name": "deposit",
+                        "in": "path",
+                        "required": true,
+                        "description": "The deposit ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-Gateway-Secret",
+                        "in": "header",
+                        "required": true,
+                        "description": "Shared demo gateway credential. Invalid credentials return 403.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/GatewayCallbackRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Command completed.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DepositCommandResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Gateway credential rejected.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Command conflicts with a committed operation or resource state.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Request validation or a deterministic business rule failed.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/gateway/deposits/{deposit}/fail": {
+            "post": {
+                "operationId": "v1_gateway_deposits_fail",
+                "tags": [
+                    "GatewayDepositCallback"
+                ],
+                "parameters": [
+                    {
+                        "name": "deposit",
+                        "in": "path",
+                        "required": true,
+                        "description": "The deposit ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-Gateway-Secret",
+                        "in": "header",
+                        "required": true,
+                        "description": "Shared demo gateway credential. Invalid credentials return 403.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/GatewayCallbackRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Command completed.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DepositCommandResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Gateway credential rejected.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Command conflicts with a committed operation or resource state.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Request validation or a deterministic business rule failed.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/wallets/{wallet}/transfers": {
+            "post": {
+                "operationId": "v1_wallets_transfers_store",
+                "tags": [
+                    "Transfer"
+                ],
+                "parameters": [
+                    {
+                        "name": "wallet",
+                        "in": "path",
+                        "required": true,
+                        "description": "The wallet ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true,
+                        "description": "Printable ASCII retry identity. Reusing it with the same request replays the committed result; changing the request returns 409.",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[\\x20-\\x7E]+$",
+                            "minLength": 1,
+                            "maxLength": 128
+                        },
+                        "example": "01JDEMO0000000000000000000"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TransferRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Command completed.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TransferCommandResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Request validation or a deterministic business rule failed.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Command conflicts with a committed operation or resource state.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/wallets/{wallet}/transactions": {
+            "get": {
+                "operationId": "v1_wallets_transactions_index",
+                "tags": [
+                    "WalletHistory"
+                ],
+                "parameters": [
+                    {
+                        "name": "wallet",
+                        "in": "path",
+                        "required": true,
+                        "description": "The wallet ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Ledger reference type filter.",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "deposit",
+                                "transfer",
+                                "withdrawal"
+                            ]
+                        },
+                        "example": "transfer"
+                    },
+                    {
+                        "name": "direction",
+                        "in": "query",
+                        "description": "Direction relative to the selected wallet.",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "credit",
+                                "debit"
+                            ]
+                        },
+                        "example": "debit"
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 2048
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {}
+                                        },
+                                        "meta": {
+                                            "type": "object",
+                                            "properties": {
+                                                "next_cursor": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "per_page": {}
+                                            },
+                                            "required": [
+                                                "next_cursor",
+                                                "per_page"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "meta"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Request validation or a deterministic business rule failed.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/wallets/{wallet}/withdrawals": {
+            "post": {
+                "operationId": "v1_wallets_withdrawals_store",
+                "tags": [
+                    "Withdrawal"
+                ],
+                "parameters": [
+                    {
+                        "name": "wallet",
+                        "in": "path",
+                        "required": true,
+                        "description": "The wallet ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true,
+                        "description": "Printable ASCII retry identity. Reusing it with the same request replays the committed result; changing the request returns 409.",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[\\x20-\\x7E]+$",
+                            "minLength": 1,
+                            "maxLength": 128
+                        },
+                        "example": "01JDEMO0000000000000000000"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateWithdrawalRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Resource created.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WithdrawalCommandResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Request validation or a deterministic business rule failed.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Command conflicts with a committed operation or resource state.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/withdrawals/{withdrawal}": {
+            "get": {
+                "operationId": "v1_withdrawals_show",
+                "tags": [
+                    "Withdrawal"
+                ],
+                "parameters": [
+                    {
+                        "name": "withdrawal",
+                        "in": "path",
+                        "required": true,
+                        "description": "The withdrawal ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Command completed.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WithdrawalCommandResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/withdrawals/{withdrawal}/approve": {
+            "post": {
+                "operationId": "v1_admin_withdrawals_approve",
+                "tags": [
+                    "WithdrawalAdmin"
+                ],
+                "parameters": [
+                    {
+                        "name": "withdrawal",
+                        "in": "path",
+                        "required": true,
+                        "description": "The withdrawal ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true,
+                        "description": "Printable ASCII retry identity. Reusing it with the same request replays the committed result; changing the request returns 409.",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[\\x20-\\x7E]+$",
+                            "minLength": 1,
+                            "maxLength": 128
+                        },
+                        "example": "01JDEMO0000000000000000000"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WithdrawalCommandRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Command completed.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WithdrawalCommandResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Command conflicts with a committed operation or resource state.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Request validation or a deterministic business rule failed.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/withdrawals/{withdrawal}/settle": {
+            "post": {
+                "operationId": "v1_admin_withdrawals_settle",
+                "tags": [
+                    "WithdrawalAdmin"
+                ],
+                "parameters": [
+                    {
+                        "name": "withdrawal",
+                        "in": "path",
+                        "required": true,
+                        "description": "The withdrawal ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true,
+                        "description": "Printable ASCII retry identity. Reusing it with the same request replays the committed result; changing the request returns 409.",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[\\x20-\\x7E]+$",
+                            "minLength": 1,
+                            "maxLength": 128
+                        },
+                        "example": "01JDEMO0000000000000000000"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WithdrawalCommandRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Command completed.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WithdrawalCommandResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Command conflicts with a committed operation or resource state.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Request validation or a deterministic business rule failed.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/withdrawals/{withdrawal}/reject": {
+            "post": {
+                "operationId": "v1_admin_withdrawals_reject",
+                "tags": [
+                    "WithdrawalAdmin"
+                ],
+                "parameters": [
+                    {
+                        "name": "withdrawal",
+                        "in": "path",
+                        "required": true,
+                        "description": "The withdrawal ID",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true,
+                        "description": "Printable ASCII retry identity. Reusing it with the same request replays the committed result; changing the request returns 409.",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[\\x20-\\x7E]+$",
+                            "minLength": 1,
+                            "maxLength": 128
+                        },
+                        "example": "01JDEMO0000000000000000000"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RejectWithdrawalRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Command completed.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WithdrawalCommandResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Referenced resource not found.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Request rate limit exceeded; inspect Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected server error.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Transient database contention; retry according to Retry-After.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Command conflicts with a committed operation or resource state.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Request validation or a deterministic business rule failed.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "CreateDepositRequest": {
+                "type": "object",
+                "properties": {
+                    "_idempotency_key": {
+                        "type": "string",
+                        "pattern": "^[!-~]+$",
+                        "maxLength": 128
+                    },
+                    "amount_minor": {
+                        "type": "integer",
+                        "description": "Positive integer amount in the currency minor unit.",
+                        "examples": [
+                            125
+                        ]
+                    }
+                },
+                "required": [
+                    "_idempotency_key",
+                    "amount_minor"
+                ],
+                "title": "CreateDepositRequest"
+            },
+            "CreateWithdrawalRequest": {
+                "type": "object",
+                "properties": {
+                    "_idempotency_key": {
+                        "type": "string",
+                        "pattern": "^[!-~]+$",
+                        "maxLength": 128
+                    },
+                    "amount_minor": {
+                        "type": "integer",
+                        "description": "Positive integer amount in the currency minor unit.",
+                        "examples": [
+                            80
+                        ]
+                    }
+                },
+                "required": [
+                    "_idempotency_key",
+                    "amount_minor"
+                ],
+                "title": "CreateWithdrawalRequest"
+            },
+            "DepositCommandResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "version": {
+                                "type": "integer"
+                            },
+                            "deposit_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "wallet_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "clearing_wallet_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "amount_minor": {
+                                "type": "integer",
+                                "minimum": 1
+                            },
+                            "status": {
+                                "type": "string",
+                                "enum": [
+                                    "PENDING",
+                                    "SUCCEEDED",
+                                    "FAILED"
+                                ]
+                            },
+                            "gateway_reference": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "ledger_transaction_id": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "uuid"
+                            },
+                            "failure_reason": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "version",
+                            "deposit_id",
+                            "wallet_id",
+                            "clearing_wallet_id",
+                            "amount_minor",
+                            "status",
+                            "gateway_reference"
+                        ]
+                    }
+                },
+                "required": [
+                    "data"
+                ],
+                "title": "DepositCommandResponse"
+            },
+            "DepositResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "wallet_id": {
+                        "type": "string"
+                    },
+                    "amount_minor": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "gateway_reference": {
+                        "type": "string"
+                    },
+                    "ledger_transaction_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "failure_reason": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "resolved_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "wallet_id",
+                    "amount_minor",
+                    "status",
+                    "gateway_reference",
+                    "ledger_transaction_id",
+                    "failure_reason",
+                    "resolved_at",
+                    "created_at"
+                ],
+                "title": "DepositResource"
+            },
+            "GatewayCallbackRequest": {
+                "type": "object",
+                "properties": {
+                    "gateway_reference": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "amount_minor": {
+                        "type": "integer",
+                        "description": "Exact integer amount originally assigned to the deposit.",
+                        "examples": [
+                            125
+                        ]
+                    }
+                },
+                "required": [
+                    "gateway_reference",
+                    "amount_minor"
+                ],
+                "title": "GatewayCallbackRequest"
+            },
+            "ProblemDetails": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "format": "uri-reference"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "integer",
+                        "minimum": 400,
+                        "maximum": 599
+                    },
+                    "detail": {
+                        "type": "string"
+                    },
+                    "instance": {
+                        "type": "string",
+                        "format": "uri-reference"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "retryable": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "instance",
+                    "code"
+                ],
+                "title": "ProblemDetails"
+            },
+            "RejectWithdrawalRequest": {
+                "type": "object",
+                "properties": {
+                    "_idempotency_key": {
+                        "type": "string",
+                        "pattern": "^[!-~]+$",
+                        "maxLength": 128
+                    },
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "_idempotency_key",
+                    "reason"
+                ],
+                "title": "RejectWithdrawalRequest"
+            },
+            "TransferCommandResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "version": {
+                                "type": "integer"
+                            },
+                            "transfer_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "ledger_transaction_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "source_wallet_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "destination_wallet_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "amount_minor": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        },
+                        "required": [
+                            "version",
+                            "transfer_id",
+                            "ledger_transaction_id",
+                            "source_wallet_id",
+                            "destination_wallet_id",
+                            "amount_minor"
+                        ]
+                    }
+                },
+                "required": [
+                    "data"
+                ],
+                "title": "TransferCommandResponse"
+            },
+            "TransferRequest": {
+                "type": "object",
+                "properties": {
+                    "_idempotency_key": {
+                        "type": "string",
+                        "pattern": "^[!-~]+$",
+                        "maxLength": 128
+                    },
+                    "destination_wallet_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "amount_minor": {
+                        "type": "integer",
+                        "description": "Positive integer amount in the currency minor unit.",
+                        "examples": [
+                            80
+                        ]
+                    }
+                },
+                "required": [
+                    "_idempotency_key",
+                    "destination_wallet_id",
+                    "amount_minor"
+                ],
+                "title": "TransferRequest"
+            },
+            "WithdrawalCommandRequest": {
+                "type": "object",
+                "properties": {
+                    "_idempotency_key": {
+                        "type": "string",
+                        "pattern": "^[!-~]+$",
+                        "maxLength": 128
+                    }
+                },
+                "required": [
+                    "_idempotency_key"
+                ],
+                "title": "WithdrawalCommandRequest"
+            },
+            "WithdrawalCommandResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "version": {
+                                "type": "integer"
+                            },
+                            "withdrawal_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "wallet_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "suspense_wallet_id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "amount_minor": {
+                                "type": "integer",
+                                "minimum": 1
+                            },
+                            "status": {
+                                "type": "string",
+                                "enum": [
+                                    "PENDING",
+                                    "APPROVED",
+                                    "SETTLED",
+                                    "REJECTED"
+                                ]
+                            },
+                            "approval_ledger_transaction_id": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "uuid"
+                            },
+                            "compensation_ledger_transaction_id": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "uuid"
+                            },
+                            "rejection_reason": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "approved_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "date-time"
+                            },
+                            "settled_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "date-time"
+                            },
+                            "rejected_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "date-time"
+                            },
+                            "created_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "date-time"
+                            }
+                        },
+                        "required": [
+                            "version",
+                            "withdrawal_id",
+                            "wallet_id",
+                            "suspense_wallet_id",
+                            "amount_minor",
+                            "status",
+                            "approval_ledger_transaction_id",
+                            "compensation_ledger_transaction_id",
+                            "rejection_reason",
+                            "approved_at",
+                            "settled_at",
+                            "rejected_at",
+                            "created_at"
+                        ]
+                    }
+                },
+                "required": [
+                    "data"
+                ],
+                "title": "WithdrawalCommandResponse"
+            },
+            "WithdrawalResource": {
+                "type": "object",
+                "properties": {
+                    "version": {
+                        "type": "integer",
+                        "const": 1
+                    },
+                    "withdrawal_id": {
+                        "type": "string"
+                    },
+                    "wallet_id": {
+                        "type": "string"
+                    },
+                    "suspense_wallet_id": {
+                        "type": "string"
+                    },
+                    "amount_minor": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "approval_ledger_transaction_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "compensation_ledger_transaction_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "rejection_reason": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "approved_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "settled_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "rejected_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "version",
+                    "withdrawal_id",
+                    "wallet_id",
+                    "suspense_wallet_id",
+                    "amount_minor",
+                    "status",
+                    "approval_ledger_transaction_id",
+                    "compensation_ledger_transaction_id",
+                    "rejection_reason",
+                    "approved_at",
+                    "settled_at",
+                    "rejected_at",
+                    "created_at"
+                ],
+                "title": "WithdrawalResource"
+            }
+        }
+    }
+}
